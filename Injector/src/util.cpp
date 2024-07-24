@@ -46,7 +46,7 @@ void WaitForCloseProcess(const std::string& processName)
 	if (pid == -1)
 		return;
 
-	std::cout << "Found '" << processName << "' process. Waiting for closing..." << std::endl;
+	LOG_ERROR("Found '%s' process. Waiting for closing...", processName.c_str());
 
 #ifdef _DEBUG
 	std::stringstream stream;
@@ -145,8 +145,7 @@ std::optional<std::string> GetOrSelectPath(CSimpleIni& ini, const char* section,
 	if (savedPath != nullptr)
 		return std::string(savedPath);
 
-	//LOG_DEBUG("%s path not found. Please point to it manually.", friendName);
-	printf("%s path not found. Please point to it manually.\n", friendName);
+	LOG_DEBUG("%s path not found. Please point to it manually.", friendName);
 
 	auto titleStr = util::string_format("Select %s", friendName);
 	auto selectedPath = filter == nullptr ? SelectDirectory(titleStr.c_str()) : SelectFile(filter, titleStr.c_str());

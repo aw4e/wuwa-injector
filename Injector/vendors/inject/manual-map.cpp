@@ -2,14 +2,6 @@
 #include "manual-map.h"
 #include <extens/utilr.h>
 
-#if defined(DISABLE_OUTPUT)
-#define ILog(data, ...)
-#define IPrintError(text, ...)
-#else
-#define ILog(text, ...) printf(text, __VA_ARGS__)
-#define ILogError(text, ...) ILog(text, __VA_ARGS__); std::cout << "Error: " << util::GetLastErrorAsString() << std::endl
-#endif
-
 #ifdef _WIN64
 #define CURRENT_ARCH IMAGE_FILE_MACHINE_AMD64
 #else
@@ -44,7 +36,7 @@ bool ManualMapDLL(HANDLE hProc, const std::string& filepath)
 	std::ifstream file(filepath, std::ios::in | std::ios::binary | std::ios::ate);
 	if (!file.is_open())
 	{
-		std::cout << "Error while reading DLL file!" << std::endl;
+		LOG_ERROR("Error while reading DLL file!");
 		return false;
 	}
 
@@ -73,7 +65,7 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	BYTE* pTargetBase = nullptr;
 
 	if (reinterpret_cast<IMAGE_DOS_HEADER*>(pSrcData)->e_magic != 0x5A4D) { //"MZ"
-		ILog("[DLL injection] Invalid file\n");
+		LOG_INFO("[DLL injection] Invalid file\n");
 		return false;
 	}
 
@@ -82,15 +74,15 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	pOldFileHeader = &pOldNtHeader->FileHeader;
 
 	if (pOldFileHeader->Machine != CURRENT_ARCH) {
-		ILog("[DLL injection] Invalid platform.\n");
+		LOG_INFO("[DLL injection] Invalid platform.\n");
 		return false;
 	}
 
-	ILog("[DLL injection] File ok\n");
+	LOG_INFO("[DLL injection] File ok\n");
 
 	pTargetBase = reinterpret_cast<BYTE*>(VirtualAllocEx(hProc, nullptr, pOldOptHeader->SizeOfImage, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
 	if (!pTargetBase) {
-		ILogError("[DLL injection] Target process memory allocation failed (ex)\n");
+		LOG_ERROR("[DLL injection] Target process memory allocation failed (ex)\n");
 		return false;
 	}
 
@@ -111,7 +103,7 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 
 	//File header
 	if (!WriteProcessMemory(hProc, pTargetBase, pSrcData, 0x1000, nullptr)) { //only first 0x1000 bytes for the header
-		ILogError("[DLL injection] Can't write file header.\n");
+		LOG_ERROR("[DLL injection] Can't write file header.\n");
 
 		VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 		return false;
@@ -121,7 +113,7 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	for (UINT i = 0; i != pOldFileHeader->NumberOfSections; ++i, ++pSectionHeader) {
 		if (pSectionHeader->SizeOfRawData) {
 			if (!WriteProcessMemory(hProc, pTargetBase + pSectionHeader->VirtualAddress, pSrcData + pSectionHeader->PointerToRawData, pSectionHeader->SizeOfRawData, nullptr)) {
-				ILogError("[DLL injection] Can't map sections.\n");
+				LOG_ERROR("[DLL injection] Can't map sections.\n");
 				VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 				return false;
 			}
@@ -131,13 +123,13 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	//Mapping params
 	BYTE* MappingDataAlloc = reinterpret_cast<BYTE*>(VirtualAllocEx(hProc, nullptr, sizeof(MANUAL_MAPPING_DATA), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
 	if (!MappingDataAlloc) {
-		ILogError("[DLL injection] Target process mapping allocation failed (ex).\n");
+		LOG_ERROR("[DLL injection] Target process mapping allocation failed (ex).\n");
 		VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 		return false;
 	}
 
 	if (!WriteProcessMemory(hProc, MappingDataAlloc, &data, sizeof(MANUAL_MAPPING_DATA), nullptr)) {
-		ILogError("[DLL injection] Can't write mapping.\n");
+		LOG_ERROR("[DLL injection] Can't write mapping.\n");
 		VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, MappingDataAlloc, 0, MEM_RELEASE);
 		return false;
@@ -146,34 +138,34 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	//Shell code
 	void* pShellcode = VirtualAllocEx(hProc, nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 	if (!pShellcode) {
-		ILogError("[DLL injection] Memory shellcode allocation failed (ex).\n");
+		LOG_ERROR("[DLL injection] Memory shellcode allocation failed (ex).\n");
 		VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, MappingDataAlloc, 0, MEM_RELEASE);
 		return false;
 	}
 
 	if (!WriteProcessMemory(hProc, pShellcode, Shellcode, 0x1000, nullptr)) {
-		ILogError("[DLL injection] Can't write shellcode.\n");
+		LOG_ERROR("[DLL injection] Can't write shellcode.\n");
 		VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, MappingDataAlloc, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, pShellcode, 0, MEM_RELEASE);
 		return false;
 	}
 
-	ILog("[DLL injection] Mapped DLL at %p\n", pTargetBase);
-	ILog("[DLL injection] Mapping info at %p\n", MappingDataAlloc);
-	ILog("[DLL injection] Shell code at %p\n", pShellcode);
+	LOG_INFO("[DLL injection] Mapped DLL at %p\n", pTargetBase);
+	LOG_INFO("[DLL injection] Mapping info at %p\n", MappingDataAlloc);
+	LOG_INFO("[DLL injection] Shell code at %p\n", pShellcode);
 
-	ILog("[DLL injection] Data allocated\n");
+	LOG_INFO("[DLL injection] Data allocated\n");
 
 #ifdef _DEBUG
-	ILog("[DLL injection] My shellcode pointer %p\n", Shellcode);
-	ILog("[DLL injection] Target point %p\n", pShellcode);
+	LOG_INFO("[DLL injection] My shellcode pointer %p\n", Shellcode);
+	LOG_INFO("[DLL injection] Target point %p\n", pShellcode);
 #endif
 
 	HANDLE hThread = CreateRemoteThread(hProc, nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(pShellcode), MappingDataAlloc, 0, nullptr);
 	if (!hThread) {
-		ILogError("[DLL injection] Thread creation failed.\n");
+		LOG_ERROR("[DLL injection] Thread creation failed.\n");
 		VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, MappingDataAlloc, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, pShellcode, 0, MEM_RELEASE);
@@ -181,14 +173,14 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	}
 	CloseHandle(hThread);
 
-	ILog("[DLL injection] Thread created at: %p, waiting for return...\n", pShellcode);
+	LOG_INFO("[DLL injection] Thread created at: %p, waiting for return...\n", pShellcode);
 
 	HINSTANCE hCheck = NULL;
 	while (!hCheck) {
 		DWORD exitcode = 0;
 		GetExitCodeProcess(hProc, &exitcode);
 		if (exitcode != STILL_ACTIVE) {
-			ILog("[DLL injection] Process crashed, exit code: 0x%x\n", exitcode);
+			LOG_INFO("[DLL injection] Process crashed, exit code: 0x%x\n", exitcode);
 			return false;
 		}
 
@@ -197,14 +189,14 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 		hCheck = data_checked.hMod;
 
 		if (hCheck == (HINSTANCE)0x404040) {
-			ILog("[DLL injection] Wrong mapping ptr.\n");
+			LOG_INFO("[DLL injection] Wrong mapping ptr.\n");
 			VirtualFreeEx(hProc, pTargetBase, 0, MEM_RELEASE);
 			VirtualFreeEx(hProc, MappingDataAlloc, 0, MEM_RELEASE);
 			VirtualFreeEx(hProc, pShellcode, 0, MEM_RELEASE);
 			return false;
 		}
 		else if (hCheck == (HINSTANCE)0x505050) {
-			ILog("[DLL injection] WARNING: Exception support failed!\n");
+			LOG_INFO("[DLL injection] WARNING: Exception support failed!\n");
 		}
 
 		Sleep(10);
@@ -212,7 +204,7 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 
 	BYTE* emptyBuffer = (BYTE*)malloc(1024 * 1024 * 20);
 	if (emptyBuffer == nullptr) {
-		ILog("[DLL injection] Unable to allocate memory\n");
+		LOG_INFO("[DLL injection] Unable to allocate memory\n");
 		return false;
 	}
 	memset(emptyBuffer, 0, 1024 * 1024 * 20);
@@ -220,7 +212,7 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	//CLEAR PE HEAD
 	if (ClearHeader) {
 		if (!WriteProcessMemory(hProc, pTargetBase, emptyBuffer, 0x1000, nullptr)) {
-			ILogError("[DLL injection] WARNING!: Can't clear HEADER\n");
+			LOG_ERROR("[DLL injection] WARNING!: Can't clear HEADER\n");
 		}
 	}
 	//END CLEAR PE HEAD
@@ -233,9 +225,9 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 				if ((SEHExceptionSupport ? 0 : strcmp((char*)pSectionHeader->Name, ".pdata") == 0) ||
 					strcmp((char*)pSectionHeader->Name, ".rsrc") == 0 ||
 					strcmp((char*)pSectionHeader->Name, ".reloc") == 0) {
-					ILog("[DLL injection] Processing %s removal\n", pSectionHeader->Name);
+					LOG_INFO("[DLL injection] Processing %s removal\n", pSectionHeader->Name);
 					if (!WriteProcessMemory(hProc, pTargetBase + pSectionHeader->VirtualAddress, emptyBuffer, pSectionHeader->Misc.VirtualSize, nullptr)) {
-						ILogError("[DLL injection] Can't clear section %s.\n", pSectionHeader->Name);
+						LOG_ERROR("[DLL injection] Can't clear section %s.\n", pSectionHeader->Name);
 					}
 				}
 			}
@@ -256,10 +248,10 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 					newP = PAGE_EXECUTE_READ;
 				}
 				if (VirtualProtectEx(hProc, pTargetBase + pSectionHeader->VirtualAddress, pSectionHeader->Misc.VirtualSize, newP, &old)) {
-					ILog("[DLL injection] Section %s set as %lX\n", (char*)pSectionHeader->Name, newP);
+					LOG_INFO("[DLL injection] Section %s set as %lX\n", (char*)pSectionHeader->Name, newP);
 				}
 				else {
-					ILog("[DLL injection] FAIL: section %s not set as %lX\n", (char*)pSectionHeader->Name, newP);
+					LOG_INFO("[DLL injection] FAIL: section %s not set as %lX\n", (char*)pSectionHeader->Name, newP);
 				}
 			}
 		}
@@ -268,13 +260,13 @@ bool ManualMapDLL(HANDLE hProc, BYTE* pSrcData, SIZE_T FileSize, bool ClearHeade
 	}
 
 	if (!WriteProcessMemory(hProc, pShellcode, emptyBuffer, 0x1000, nullptr)) {
-		ILog("[DLL injection] WARNING: Can't clear shellcode\n");
+		LOG_INFO("[DLL injection] WARNING: Can't clear shellcode\n");
 	}
 	if (!VirtualFreeEx(hProc, pShellcode, 0, MEM_RELEASE)) {
-		ILog("[DLL injection] WARNING: can't release shell code memory\n");
+		LOG_INFO("[DLL injection] WARNING: can't release shell code memory\n");
 	}
 	if (!VirtualFreeEx(hProc, MappingDataAlloc, 0, MEM_RELEASE)) {
-		ILog("[DLL injection] WARNING: can't release mapping data memory\n");
+		LOG_INFO("[DLL injection] WARNING: can't release mapping data memory\n");
 	}
 
 	return true;

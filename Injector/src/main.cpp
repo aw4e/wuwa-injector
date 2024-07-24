@@ -42,9 +42,12 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			std::cout << "No DLL selected. Exiting.\n";
+			LOG_ERROR("No DLL selected. Exiting.");
 			return 1;
 		}
+	}
+	else {
+		LOG_INFO("DLL Path: %s", dllPath.c_str());
 	}
 
 	HANDLE hProcess, hThread;
@@ -56,7 +59,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	LOG_INFO("Process opened successfully.");
+	LOG_INFO("Waiting for the game window to initialize..");
 
 	current_path(path);
 	ini.SaveFile("Settings.ini");
@@ -96,7 +99,7 @@ bool OpenGameProcess(HANDLE* phProcess, HANDLE* phThread)
 		return false;
 	}
 
-	auto filePath = GetOrSelectPath(ini, "Settings", "Executable", "wuwa path", "Executable\0Client-Win64-Shipping.exe;\0");
+	auto filePath = GetOrSelectPath(ini, "Settings", "Executable", "Wuwa Path", "Executable\0Client-Win64-Shipping.exe;\0");
 	auto commandline = ini.GetValue("Settings", "WuwaCommandLine");
 
 	std::string newCommandLine;
