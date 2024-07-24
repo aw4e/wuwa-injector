@@ -30,6 +30,8 @@ int main(int argc, char* argv[])
 	ini.SetUnicode();
 	ini.LoadFile("Settings.ini");
 
+	LOG_INFO("Select the DLL file to inject..");
+
 	std::string dllPath = ini.GetValue("Settings", "DLL", "");
 	if (dllPath.empty())
 	{
