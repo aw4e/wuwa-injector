@@ -10,7 +10,7 @@
 #include "util.h"
 #include <extens/logger.h>
 
-const std::string GlobalWuwaProcName = "Client-Win64-Shipping.exe";
+const std::string ProcName = "Client-Win64-Shipping.exe";
 
 static CSimpleIni ini;
 
@@ -18,14 +18,14 @@ bool OpenGameProcess(HANDLE* phProcess, HANDLE* phThread);
 
 int main(int argc, char* argv[])
 {
-	//Logger::SetLevel(Logger::Level::Debug, Logger::LoggerType::ConsoleLogger);
+	Logger::SetLevel(Logger::Level::Debug, Logger::LoggerType::ConsoleLogger);
 
 	auto path = std::filesystem::path(argv[0]).parent_path();
 	current_path(path);
 
-	WaitForCloseProcess(GlobalWuwaProcName);
+	WaitForCloseProcess(ProcName);
 
-	Sleep(1000); // Wait for unloading all dlls.
+	Sleep(1000);
 
 	ini.SetUnicode();
 	ini.LoadFile("Settings.ini");
